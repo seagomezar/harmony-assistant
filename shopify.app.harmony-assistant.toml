@@ -3,7 +3,7 @@
 client_id = "8b0d5184956ba3395973c3f1767ffd67"
 name = "Harmony-assistant"
 handle = "harmony-assistant"
-application_url = "https://example.com/"
+application_url = "https://harmony-assistant.onrender.com/"
 embedded = true
 
 [build]
@@ -18,7 +18,7 @@ api_version = "2025-07"
 scopes = "customer_read_customers,customer_read_orders,customer_read_store_credit_account_transactions,customer_read_store_credit_accounts,unauthenticated_read_product_listings"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://harmony-assistant.onrender.com/api/auth" ]
 
 [pos]
 embedded = false
