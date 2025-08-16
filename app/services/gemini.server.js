@@ -17,6 +17,20 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import AppConfig from "./config.server";
 import systemPrompts from "../prompts/prompts.json";
 
+// Fix for ReadableStream polyfill conflicts in Node.js environment
+// Ensure native Node.js streams are used instead of web-streams-polyfill
+/* eslint-disable no-undef */
+if (typeof globalThis !== 'undefined' && globalThis.ReadableStream && globalThis.TextDecoderStream) {
+  // Node.js 18+ has native support, ensure these are available globally
+  if (!global.ReadableStream) {
+    global.ReadableStream = globalThis.ReadableStream;
+  }
+  if (!global.TextDecoderStream) {
+    global.TextDecoderStream = globalThis.TextDecoderStream;
+  }
+}
+/* eslint-enable no-undef */
+
 
 /**
  * Translates the application's message history (which may be in Claude's format)
@@ -118,8 +132,19 @@ export function createGeminiService(apiKey = process.env.GEMINI_API_KEY) {
 
     const geminiHistory = formatHistoryForGemini(messages);
 
-    // Generate content stream from Gemini
-    const result = await model.generateContentStream({ contents: geminiHistory });
+    // Call generateContentStream with error handling for ReadableStream polyfill conflicts
+    let result;
+    try {
+      result = await model.generateContentStream({ contents: geminiHistory });
+    } catch (error) {
+      // Check if this is the specific ReadableStream polyfill error
+      if (error.message && error.message.includes("First parameter has member 'readable' that is not a ReadableStream")) {
+        console.error("Gemini Service: ReadableStream polyfill conflict detected. This is a known issue with web-streams-polyfill versions.");
+        throw new Error("Streaming is temporarily unavailable due to a ReadableStream compatibility issue with the Gemini service. Please try again or contact support if the issue persists.");
+      }
+      // Re-throw other errors as-is
+      throw error;
+    }
 
     // Create a new ReadableStream to adapt Gemini's output
     const customReadableStream = new ReadableStream({
