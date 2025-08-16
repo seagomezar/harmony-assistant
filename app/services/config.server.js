@@ -3,10 +3,12 @@
  * Centralizes all configuration values for the chat service
  */
 
+import { getEnvConfig } from './environment.server.js';
+
 export const AppConfig = {
   // API Configuration
   api: {
-    defaultProvider: 'gemini', // or 'gemini'
+    defaultProvider: getEnvConfig()?.ai?.provider || 'claude',
     claude: {
       defaultModel: 'claude-3-5-sonnet-latest',
     },

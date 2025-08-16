@@ -60,6 +60,75 @@ This repo can be customized. You can:
 You can learn how from our [dev docs](https://shopify.dev/docs/apps/build/storefront-mcp).
 
 ## Deployment
+
+### Quick Start
+
+1. **Environment Setup**
+   ```bash
+   # Set up your environment (development/staging/production)
+   ./scripts/setup-env.sh development
+   
+   # Install dependencies
+   npm install
+   
+   # Start development server
+   npm run dev
+   ```
+
+2. **Production Deployment**
+   ```bash
+   # Deploy to staging
+   ./scripts/deploy.sh staging
+   
+   # Deploy to production
+   ./scripts/deploy.sh production
+   ```
+
+### Deployment Options
+
+- **Shopify App Store**: Follow the [Shopify Deployment Guide](./docs/SHOPIFY_DEPLOYMENT.md)
+- **Render.com**: Follow the [Render Deployment Guide](./docs/RENDER_DEPLOYMENT.md)
+- **Custom Infrastructure**: Use the provided Docker configuration
+
+### Environment Management
+
+The application supports multiple environments with proper configuration management:
+
+- **Development**: Local development with ngrok tunneling
+- **Staging**: Pre-production testing environment  
+- **Production**: Live application
+
+See the [Environment Management Guide](./docs/ENVIRONMENT_MANAGEMENT.md) for detailed setup instructions.
+
+## Analytics and Logging
+
+The application includes comprehensive logging and analytics:
+
+- **Structured JSON logging** for machine parsing
+- **Event tracking** for user interactions and business metrics
+- **Performance monitoring** for response times and bottlenecks
+- **Error tracking** with detailed stack traces
+- **Analytics integration** with Google Analytics, Mixpanel, and custom services
+
+See the [Analytics and Logging Guide](./docs/ANALYTICS_LOGGING.md) for implementation details.
+
+## Documentation
+
+### Setup and Deployment
+- [Environment Management Guide](./docs/ENVIRONMENT_MANAGEMENT.md) - Environment variables and configuration
+- [Shopify Deployment Guide](./docs/SHOPIFY_DEPLOYMENT.md) - Shopify app deployment process
+- [Render Deployment Guide](./docs/RENDER_DEPLOYMENT.md) - Render.com deployment instructions
+- [Analytics and Logging Guide](./docs/ANALYTICS_LOGGING.md) - Structured logging and analytics
+
+### Scripts
+- `./scripts/setup-env.sh` - Environment setup automation
+- `./scripts/deploy.sh` - Automated deployment script
+
+### CI/CD
+- GitHub Actions workflow for automated testing and deployment
+- Environment-specific deployments (staging/production)
+- Security scanning and code quality checks
+
 Follow standard Shopify app deployment procedures as outlined in the [Shopify documentation](https://shopify.dev/docs/apps/deployment/web).
 
 ## Contributing

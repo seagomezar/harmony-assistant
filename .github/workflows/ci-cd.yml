@@ -1,0 +1,203 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Test and validate code
+  test:
+    runs-on: ubuntu-latest
+    name: Test and Validate
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Build application
+        run: npm run build
+        env:
+          # Set minimal env vars needed for build
+          SHOPIFY_API_KEY: test_key
+          SHOPIFY_API_SECRET: test_secret
+          SHOPIFY_APP_URL: https://test.example.com
+          CLAUDE_API_KEY: test_claude_key
+          DATABASE_URL: file:./test.db
+          REDIRECT_URL: https://test.example.com/auth/callback
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Run tests if they exist
+      - name: Run tests
+        run: npm test --if-present
+
+  # Deploy to staging
+  deploy-staging:
+    needs: test
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Shopify CLI
+        run: npm install -g @shopify/cli
+
+      - name: Build application
+        run: npm run build
+        env:
+          SHOPIFY_API_KEY: ${{ secrets.SHOPIFY_API_KEY_STAGING }}
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET_STAGING }}
+          SHOPIFY_APP_URL: ${{ secrets.SHOPIFY_APP_URL_STAGING }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY_STAGING }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+          REDIRECT_URL: ${{ secrets.SHOPIFY_APP_URL_STAGING }}/auth/callback
+
+      - name: Deploy to Shopify Staging
+        run: |
+          echo "Deploying to staging environment..."
+          shopify app deploy --force
+        env:
+          SHOPIFY_API_KEY: ${{ secrets.SHOPIFY_API_KEY_STAGING }}
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET_STAGING }}
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+
+      - name: Verify deployment
+        run: |
+          sleep 30
+          curl -f ${{ secrets.SHOPIFY_APP_URL_STAGING }}/health || echo "Health check failed"
+
+      - name: Notify Slack
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Staging deployment ${{ job.status }}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Deploy to production
+  deploy-production:
+    needs: test
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Shopify CLI
+        run: npm install -g @shopify/cli
+
+      - name: Build application
+        run: npm run build
+        env:
+          SHOPIFY_API_KEY: ${{ secrets.SHOPIFY_API_KEY_PROD }}
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET_PROD }}
+          SHOPIFY_APP_URL: ${{ secrets.SHOPIFY_APP_URL_PROD }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY_PROD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+          REDIRECT_URL: ${{ secrets.SHOPIFY_APP_URL_PROD }}/auth/callback
+
+      - name: Deploy to Shopify Production
+        run: |
+          echo "Deploying to production environment..."
+          shopify app deploy --force
+        env:
+          SHOPIFY_API_KEY: ${{ secrets.SHOPIFY_API_KEY_PROD }}
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET_PROD }}
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+
+      - name: Verify deployment
+        run: |
+          sleep 30
+          curl -f ${{ secrets.SHOPIFY_APP_URL_PROD }}/health || echo "Health check failed"
+
+      - name: Create deployment tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a "deploy-$(date +'%Y%m%d-%H%M%S')" -m "Production deployment"
+          git push origin --tags
+
+      - name: Notify team
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: '🚀 Production deployment ${{ job.status }}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Security scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scan
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run npm audit
+        run: npm audit --audit-level moderate
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

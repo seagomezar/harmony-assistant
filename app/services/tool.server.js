@@ -4,6 +4,7 @@
  */
 import { saveMessage } from "../db.server";
 import AppConfig from "./config.server";
+import logger, { trackAIEvent, trackProductEvent, ANALYTICS_EVENTS } from "./logger.server.js";
 
 /**
  * Creates a tool service instance
@@ -55,7 +56,11 @@ export function createToolService() {
    */
   const processProductSearchResult = (toolUseResponse) => {
     try {
-      console.log("Processing product search result");
+      logger.debug("Processing product search result");
+      trackProductEvent(ANALYTICS_EVENTS.PRODUCT_SEARCH, { 
+        source: 'tool_response' 
+      });
+      
       let products = [];
 
       if (toolUseResponse.content && toolUseResponse.content.length > 0) {
@@ -74,16 +79,26 @@ export function createToolService() {
               .slice(0, AppConfig.tools.maxProductsToDisplay)
               .map(formatProductData);
 
-            console.log(`Found ${products.length} products to display`);
+            logger.info(`Found ${products.length} products to display`, {
+              productCount: products.length,
+              maxDisplayed: AppConfig.tools.maxProductsToDisplay
+            });
+            
+            trackProductEvent(ANALYTICS_EVENTS.PRODUCT_VIEW, {
+              productCount: products.length,
+              source: 'search_result'
+            });
           }
         } catch (e) {
-          console.error("Error parsing product data:", e);
+          logger.error("Error parsing product data", { error: e.message }, e);
         }
       }
 
       return products;
     } catch (error) {
-      console.error("Error processing product search results:", error);
+      logger.error("Error processing product search results", { 
+        error: error.message 
+      }, error);
       return [];
     }
   };
