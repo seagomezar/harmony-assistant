@@ -137,11 +137,60 @@ export function createGeminiService(apiKey = process.env.GEMINI_API_KEY) {
     try {
       result = await model.generateContentStream({ contents: geminiHistory });
     } catch (error) {
-      // Check if this is the specific ReadableStream polyfill error
-      if (error.message && error.message.includes("First parameter has member 'readable' that is not a ReadableStream")) {
-        console.error("Gemini Service: ReadableStream polyfill conflict detected. This is a known issue with web-streams-polyfill versions.");
-        throw new Error("Streaming is temporarily unavailable due to a ReadableStream compatibility issue with the Gemini service. Please try again or contact support if the issue persists.");
+      // If this is a ReadableStream compatibility issue, gracefully fall back to non-streaming
+      const isReadableStreamCompatIssue = Boolean(
+        error?.message && /ReadableStream|First parameter has member 'readable'/i.test(error.message)
+      );
+
+      if (isReadableStreamCompatIssue) {
+        console.warn("Gemini Service: ReadableStream compatibility issue detected. Falling back to non-streaming mode.");
+
+        // Non-streaming fallback: get the full response and simulate streaming chunks
+        const nonStream = await model.generateContent({ contents: geminiHistory });
+        const aggregatedResponse = await nonStream.response;
+
+        // Extract text and simulate chunked streaming
+        const fullText = typeof aggregatedResponse.text === 'function' ? aggregatedResponse.text() : '';
+        if (fullText && streamHandlers.onText) {
+          const chunkSize = 200; // small chunks to mimic streaming
+          for (let i = 0; i < fullText.length; i += chunkSize) {
+            const chunk = fullText.slice(i, i + chunkSize);
+            streamHandlers.onText(chunk);
+          }
+        }
+
+        // Handle tool calls if present
+        const responseCandidate = aggregatedResponse.candidates?.[0];
+        const geminiToolCalls = responseCandidate?.content?.parts
+          ?.filter(part => !!part.functionCall)
+          ?.map(part => part.functionCall) || [];
+
+        if (streamHandlers.onToolUse && geminiToolCalls.length > 0) {
+          for (const geminiCall of geminiToolCalls) {
+            const claudeToolUseObject = {
+              type: 'tool_use', id: geminiCall.name, name: geminiCall.name, input: geminiCall.args,
+            };
+            await streamHandlers.onToolUse(claudeToolUseObject);
+          }
+        }
+
+        // Final message
+        const finalMessage = {
+          role: 'assistant',
+          content: geminiToolCalls.length > 0
+            ? geminiToolCalls.map(tc => ({ type: 'tool_use', id: tc.name, name: tc.name, input: tc.args }))
+            : [{ type: 'text', text: fullText }],
+          model: AppConfig.api.gemini.defaultModel,
+          stop_reason: mapFinishReason(responseCandidate?.finishReason),
+        };
+
+        if (streamHandlers.onMessage) {
+          streamHandlers.onMessage(finalMessage);
+        }
+
+        return finalMessage;
       }
+
       // Re-throw other errors as-is
       throw error;
     }
